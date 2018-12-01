@@ -1,69 +1,94 @@
-CXX       = g++
-CXXFLAGS  = -MMD -MP -Wall -O3 -std=c++14
+# Directory
+TARGET_DIR   = ./bin
+INCLUDE_DIR  = ./include
+LIB_DIR      = ./lib
+OBJ_DIR      = ./obj
+SRC_DIR      = ./src
+TEST_SRC_DIR = ./test
+
+# Environment
+CXX          = g++
+CXXFLAGS     = -MMD -MP -Wall -O3 -std=c++14
+DEBUG_OPTION = -O0 -g
 ifeq "$(shell getconf LONG_BIT)" "64"
-  LDFLAGS =
+  LDFLAGS    =
 else
-  LDFLAGS =
+  LDFLAGS    =
 endif
-LIBS      =
+LIBS         =
 
-# インクルードパスの指定
-INCLUDE   = -I./include -I./
+# Include Path
+INCLUDE   = -I$(INCLUDE_DIR)
 
+# Targets
 # デフォルトではmakefileのあるディレクトリ名を実行ファイル名にしている
-TARGET_NAME = /$(shell basename `readlink -f .`)
-TARGET_DIR  = ./bin
+TARGET_NAME       = /$(shell basename `readlink -f .`)
+DEBUG_TARGET_NAME = $(TARGET_NAME)_debug
 ifeq "$(strip $(TARGET_DIR))" ""
   -mkdir -p $(TARGET_DIR)
 endif
-TARGET    = $(TARGET_DIR)/$(TARGET_NAME)
-
-#ソースファイルのあるディレクトリ
-SRCDIR    = ./src
-ifeq "$(strip $(SRCDIR))" ""
-  SRCDIR  = .
-endif
+TARGET       = $(TARGET_DIR)/$(TARGET_NAME)
+DEBUG_TARGET = $(TARGET_DIR)/$(DEBUG_TARGET_NAME)
 
 # ソースファイルの宣言．ソースファイルディレクトリ以下の全ての.cppファイル．
-SOURCES   = $(wildcard $(SRCDIR)/*.cpp) $(wildcard ./*.cpp)
-
-# 中間ファイルを置くのディレクトリ
-OBJDIR    = ./obj
-ifeq "$(strip $(OBJDIR))" ""
-  OBJDIR  = .
-endif
+SOURCES   = $(wildcard $(SRC_DIR)/*.cpp)
 
 # オブジェクトファイル．ソースファイルの.cppを.oに置換したもの
-OBJECTS   = $(addprefix $(OBJDIR)/, $(notdir $(SOURCES:.cpp=.o)))
+OBJECTS   = $(addprefix $(OBJ_DIR)/, $(notdir $(SOURCES:.cpp=.o)))
 
 # 依存関係を示す中間ファイル（*.d）を宣言
 DEPENDS   = $(OBJECTS:.o=.d)
 
-# ターゲットの依存関係
+# Default Target
+default: $(TARGET)
+.PHONY: default
+
+# 最終的な実行ファイルの依存関係
 $(TARGET): $(OBJECTS) $(LIBS)
 	-mkdir -p $(TARGET_DIR)
 	$(CXX) -o $@ $^ $(LDFLAGS)
 
 # オブジェクトの依存関係
-$(OBJDIR)/%.o: $(SRCDIR)/%.cpp
-	-mkdir -p $(OBJDIR)
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
+	-mkdir -p $(OBJ_DIR)
 	$(CXX) $(CXXFLAGS) $(INCLUDE) -o $@ -c $<
 
-# ホームディレクトリも一応見ておく
-$(OBJDIR)/%.o: ./%.cpp
-	-mkdir -p $(OBJDIR)
-	$(CXX) $(CXXFLAGS) $(INCLUDE) -o $@ -c $<
+#
+# debug(gdb)
+#
+
+# デバッグ用オブジェクト
+DEBUG_OBJECTS = $(addprefix $(OBJ_DIR)/, $(notdir $(SOURCES:.cpp=.debug_o)))
+
+# デバッグ用実行ファイルの依存関係
+$(DEBUG_TARGET): $(DEBUG_OBJECTS) $(LIBS)
+	-mkdir -p $(TARGET_DIR)
+	$(CXX) -o $@ $^ $(LDFLAGS)
+
+# デバッグ用オブジェクトの依存関係
+$(OBJ_DIR)/%.debug_o: $(SRC_DIR)/%.cpp
+	-mkdir -p $(OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(DEBUG_OPTION) $(INCLUDE) -o $@ -c $<
+
+#
+# ターゲット
+#
 
 all: clean $(TARGET)
-
-clean:
-	-rm -f $(OBJECTS) $(DEPENDS) $(TARGET) $(TARGET).exe
-
--include $(DEPENDS)
+.PHONY: all
 
 # コンパイル&実行
 run: $(TARGET)
-	cd bin; ./$(TARGET_NAME).exe
+	cd bin; .$(TARGET_NAME).exe
+.PHONY: run
 
-# ファイル生成しないターゲットを明記
-.PHONY: all clean run
+debug: $(DEBUG_TARGET)
+	cd bin; .$(DEBUG_TARGET_NAME).exe
+.PHONY: debug
+
+clean:
+	-rm -f $(OBJECTS) $(DEPENDS) $(TARGET) $(TARGET).exe
+	-rm -f $(DEBUG_OBJECTS) $(DEBUG_TARGET) $(DEBUG_TARGET).exe
+.PHONY: clean
+
+-include $(DEPENDS)
