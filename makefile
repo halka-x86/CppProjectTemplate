@@ -5,6 +5,7 @@ LIB_DIR      = ./lib
 OBJ_DIR      = ./obj
 SRC_DIR      = ./src
 TEST_SRC_DIR = ./test
+TEST_OBJ_DIR = $(TEST_SRC_DIR)/obj
 
 # Environment
 CXX          = g++
@@ -71,6 +72,53 @@ $(OBJ_DIR)/%.debug_o: $(SRC_DIR)/%.cpp
 	$(CXX) $(CXXFLAGS) $(DEBUG_OPTION) $(INCLUDE) -o $@ -c $<
 
 #
+# googletest
+#
+
+# Directory
+GTEST_DIR       = $(TEST_SRC_DIR)/googletest
+GTEST_BUILD_DIR = $(TEST_SRC_DIR)/build
+GTEST_LIB_DIR   = $(GTEST_BUILD_DIR)/lib
+
+# googletest lib
+GTEST_LIBS      = -lgtest_main -lgtest -lpthread
+GTEST_LIB_FILES = $(GTEST_LIB_DIR)/libgtest_main.a $(GTEST_LIB_DIR)/libgtest.a
+GTEST_INCLUDE   = -I$(GTEST_DIR)/googletest/include
+
+# src & obj
+TEST_SOURCES    = $(wildcard $(TEST_SRC_DIR)/*.cpp)
+TEST_OBJECTS   = $(addprefix $(TEST_OBJ_DIR)/, $(notdir $(TEST_SOURCES:.cpp=.o)))
+TEST_DEPENDS   = $(TEST_OBJECTS:.o=.d)
+
+# Targets
+TEST_TARGET     = $(addprefix $(TEST_SRC_DIR)/, $(notdir $(TEST_SOURCES:.cpp=.exe)))
+
+ifeq ($(OS),Windows_NT)
+	CMAKE_FLAGS = -G "MSYS Makefiles"
+else
+	CMAKE_FLAGS =
+endif
+
+# googletest lib
+$(GTEST_LIB_FILES):
+	mkdir -p $(GTEST_BUILD_DIR)
+	cd $(GTEST_BUILD_DIR); cmake ../googletest $(CMAKE_FLAGS); make
+
+# test targets
+$(TEST_TARGET): $(GTEST_LIB_FILES) $(OBJECTS) $(TEST_OBJECTS)
+	$(CXX) -o $@ $(filter-out $(OBJ_DIR)/main.o, $(OBJECTS))  $(TEST_OBJECTS) $(LDFLAGS) $(INCLUDE) -L$(GTEST_LIB_DIR) $(GTEST_INCLUDE) $(GTEST_LIBS)
+
+# test objects
+$(TEST_OBJ_DIR)/%.o: $(TEST_SRC_DIR)/%.cpp
+	-mkdir -p $(TEST_OBJ_DIR)
+	$(CXX) $(CXXFLAGS) $(INCLUDE) $(GTEST_INCLUDE) -L$(GTEST_LIB_DIR) $(GTEST_LIBS) -o $@ -c $<
+
+test: $(TEST_TARGET)
+	$(TEST_TARGET)
+.PHONY: test
+
+
+#
 # ターゲット
 #
 
@@ -89,6 +137,8 @@ debug: $(DEBUG_TARGET)
 clean:
 	-rm -f $(OBJECTS) $(DEPENDS) $(TARGET) $(TARGET).exe
 	-rm -f $(DEBUG_OBJECTS) $(DEBUG_TARGET) $(DEBUG_TARGET).exe
+	-rm -f $(TEST_OBJECTS) $(TEST_DEPENDS) $(TEST_TARGET) $(TEST_TARGET).exe
+	rm -rf $(GTEST_BUILD_DIR)
 .PHONY: clean
 
 -include $(DEPENDS)
